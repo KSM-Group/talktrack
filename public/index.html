@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TalkTrack — głosowy trener angielskiego</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+:root{
+  --bg:#211c17; --bg-deep:#171310; --surface:#2a241d; --card:#2a241d; --card-hi:#352d23;
+  --line:#4d4131; --ink:#e9e0c9; --ink-dim:#ab9d80; --ink-faint:#786c55;
+  --amber:#f2924a; --amber-dim:#a35f26; --teal:#8faa66; --rust:#c14a34;
+  --radius-card:3px; --radius-pill:6px; font-size:16px;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{ background:var(--bg); color:var(--ink); font-family:'Public Sans',system-ui,sans-serif; min-height:100vh; -webkit-font-smoothing:antialiased; }
+h1,h2,h3,.serif{ font-family:'Spectral',Georgia,serif; font-weight:500; }
+.mono{ font-family:'IBM Plex Mono',ui-monospace,monospace; }
+button{ font-family:inherit; }
+button:focus-visible, input:focus-visible, select:focus-visible{ outline:2px solid var(--amber); outline-offset:2px; }
+.app{ display:flex; min-height:100vh; }
+.sidebar{ width:230px; flex-shrink:0; background:var(--bg-deep); border-right:1px solid var(--line); padding:24px 18px; display:flex; flex-direction:column; gap:22px; }
+.brand{ display:flex; align-items:center; gap:10px; }
+.brand-mark{ width:30px;height:30px;border-radius:4px;border:1px solid var(--line); color:var(--amber); display:flex;align-items:center;justify-content:center; font-size:15px;}
+.brand-name{ font-family:'Spectral',serif; font-size:1.15rem; }
+.ladder{ display:flex; flex-direction:column; gap:3px; margin-top:6px; }
+.rung{ display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:2px; cursor:pointer; border:1px solid transparent; color:var(--ink-dim); font-size:.86rem; }
+.rung:hover{ background:var(--card); }
+.rung.active{ background:var(--card-hi); border-color:var(--line); color:var(--ink); }
+.rung.current{ color:var(--amber); }
+.rung .dot{ width:7px;height:7px;border-radius:2px; background:var(--line); flex-shrink:0; }
+.rung.done .dot{ background:var(--teal); box-shadow:0 0 5px 1px var(--teal); }
+.rung.current .dot{ background:var(--amber); box-shadow:0 0 6px 1px var(--amber); }
+.sidebar-foot{ margin-top:auto; font-size:.78rem; color:var(--ink-faint); line-height:1.5; }
+.profile-chip{ display:flex; align-items:center; gap:8px; padding:9px 11px; background:var(--card); border:1px solid var(--line); border-radius:4px; font-size:.82rem; }
+.profile-chip .av{ width:22px;height:22px;border-radius:3px; background:var(--teal); display:flex;align-items:center;justify-content:center; font-size:.7rem; font-weight:700; color:#06201c;}
+.main{ flex:1; padding:34px 44px; max-width:900px; }
+.eyebrow-row{ display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;}
+.kicker{ display:inline-block; font-family:'IBM Plex Mono',monospace; font-size:.68rem; letter-spacing:.06em; color:var(--ink-faint); border:1px solid var(--line); border-radius:3px; padding:2px 7px; margin-bottom:8px;}
+h1.page-title{ font-size:2.2rem; margin:2px 0 12px; font-style:italic; font-weight:500; letter-spacing:-.01em; position:relative; padding-bottom:10px;}
+h1.page-title::after{ content:""; position:absolute; left:0; bottom:0; width:46px; height:2px; background:var(--amber); }
+p.lede{ color:var(--ink-dim); font-size:1rem; max-width:60ch; line-height:1.55; margin:0 0 28px; }
+.card{ background:var(--card); border:1px solid var(--line); border-radius:var(--radius-card); padding:22px 24px; }
+.btn{ border:1px solid var(--line); background:var(--card-hi); color:var(--ink); padding:11px 18px; border-radius:var(--radius-pill); font-size:.9rem; cursor:pointer; transition:background .15s, transform .1s; }
+.btn:hover{ background:var(--line); }
+.btn:active{ transform:scale(.97); }
+.btn.primary{ background:var(--amber); border-color:var(--amber); color:#241703; font-weight:600; }
+.btn.primary:hover{ background:#ffab6e; }
+.btn.ghost{ background:transparent; }
+.btn.small{ font-family:'IBM Plex Mono',monospace; font-size:.72rem; letter-spacing:.04em; text-transform:uppercase; padding:8px 12px; }
+.btn:disabled{ opacity:.45; cursor:not-allowed; }
+.field label{ display:block; font-size:.8rem; color:var(--ink-dim); margin-bottom:7px; }
+.field input[type=text], .field input[type=email], .field input[type=password], .field select{
+  width:100%; padding:10px 12px; border-radius:4px; border:1px solid var(--line); background:var(--surface); color:var(--ink); font-size:.92rem;
+}
+.setup-grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:22px;}
+.voice-toggle{ display:flex; gap:6px; }
+.voice-toggle button{ flex:1; }
+.voice-toggle button.active{ background:var(--amber); border-color:var(--amber); color:#241703; font-weight:600;}
+.stage{ display:flex; flex-direction:column; gap:16px; }
+.transcript{ display:flex; flex-direction:column; gap:14px; max-height:52vh; overflow-y:auto; padding-right:4px; }
+.bubble{ max-width:72%; padding:13px 16px; border-radius:2px; line-height:1.5; font-size:.95rem; border-left:3px solid var(--line); background:var(--card); border-top:1px solid var(--line); border-right:1px solid var(--line); border-bottom:1px solid var(--line);}
+.bubble.tutor{ align-self:flex-start; border-left-color:var(--amber-dim); }
+.bubble.tutor .serif{ font-size:1.03rem; font-style:italic; }
+.bubble.user{ align-self:flex-end; background:var(--card-hi); font-family:'IBM Plex Mono',monospace; font-size:.86rem; }
+.bubble.system{ align-self:center; color:var(--ink-faint); font-size:.78rem; background:none; border:none; padding:2px 8px;}
+.correction{ margin-top:9px; padding:9px 11px; border-left:3px solid var(--rust); background:rgba(193,74,52,.12); border-radius:0 4px 4px 0; font-size:.85rem; font-family:'Public Sans',sans-serif; }
+.correction.ok{ border-left-color:var(--teal); background:rgba(143,170,102,.14); }
+.controls{ display:flex; align-items:center; gap:14px; padding-top:6px; border-top:1px solid var(--line); }
+.mic-btn{ width:64px; height:64px; border-radius:50%; border:2px solid var(--amber-dim); cursor:pointer; flex-shrink:0; background:var(--bg-deep); color:var(--amber); display:flex; align-items:center; justify-content:center; font-size:1.5rem; transition:box-shadow .3s, transform .15s; }
+.mic-btn.listening{ background:var(--rust); color:var(--ink); border-color:var(--rust); animation:pulse 1.4s infinite; }
+@keyframes pulse{ 0%{ box-shadow:0 0 0 0 rgba(193,74,52,.55);} 70%{ box-shadow:0 0 0 14px rgba(193,74,52,0);} 100%{box-shadow:0 0 0 0 rgba(193,74,52,0);} }
+.mic-btn:disabled{ opacity:.4; cursor:not-allowed; }
+.live-text{ flex:1; color:var(--ink-dim); font-size:.9rem; min-height:20px; font-style:italic; }
+.stage-actions{ display:flex; gap:8px; flex-wrap:wrap; }
+.level-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.level-card{ cursor:pointer; }
+.level-card h3{ margin:0 0 4px; font-size:1.05rem; }
+.level-card p{ margin:0; color:var(--ink-dim); font-size:.84rem; line-height:1.5;}
+.badge{ display:inline-block; font-family:'IBM Plex Mono',monospace; font-size:.72rem; padding:3px 9px; border-radius:3px; background:var(--card-hi); color:var(--ink-dim); margin-bottom:8px;}
+.badge.locked{ opacity:.55; }
+.lesson-row{ display:flex; align-items:center; justify-content:space-between; padding:13px 4px; border-bottom:1px solid var(--line); }
+.lesson-row:last-child{ border-bottom:none; }
+.lesson-row .meta{ font-size:.8rem; color:var(--ink-faint); }
+.loader{ display:flex; align-items:center; gap:9px; color:var(--ink-faint); font-size:.85rem; }
+.loader .dot3{ display:inline-flex; gap:3px; }
+.loader .dot3 span{ width:5px;height:5px;border-radius:50%; background:var(--ink-faint); animation:bounce 1s infinite; }
+.loader .dot3 span:nth-child(2){ animation-delay:.15s;} .loader .dot3 span:nth-child(3){animation-delay:.3s;}
+@keyframes bounce{ 0%,80%,100%{transform:translateY(0);} 40%{transform:translateY(-4px);} }
+.toast{ position:fixed; bottom:22px; left:50%; transform:translateX(-50%); background:var(--card-hi); border:1px solid var(--line); padding:11px 18px; border-radius:var(--radius-pill); font-size:.84rem; box-shadow:0 8px 24px rgba(0,0,0,.35); z-index:50; }
+.auth-wrap{ max-width:380px; margin:10vh auto; padding:0 20px; }
+.auth-tabs{ display:flex; gap:6px; margin-bottom:16px; }
+.auth-tabs button.active{ background:var(--amber); border-color:var(--amber); color:#241703; font-weight:600;}
+.error-text{ color:var(--rust); font-size:.82rem; margin-top:10px; }
+@media (max-width:760px){
+  .app{ flex-direction:column; }
+  .sidebar{ width:100%; flex-direction:row; overflow-x:auto; align-items:center; border-right:none; border-bottom:1px solid var(--line); padding:14px 16px;}
+  .ladder{ flex-direction:row; margin-top:0; }
+  .sidebar-foot{ display:none; }
+  .main{ padding:22px 18px; }
+  .setup-grid{ grid-template-columns:1fr; }
+  .level-grid{ grid-template-columns:1fr; }
+  .bubble{ max-width:88%; }
+}
+</style>
+</head>
+<body>
+<div class="app" id="app"><div class="loader" style="margin:40px;">Ładowanie <span class="dot3"><span></span><span></span><span></span></span></div></div>
+
+<script>
+/* ============================= CONFIG — replace with your own project ============================= */
+const SUPABASE_URL = "https://uujseerljwjmprlbkpxk.supabase.co";       // np. https://xxxx.supabase.co
+const SUPABASE_ANON_KEY = "sb_publishable_myG-R6bO1ZywW0QxB0Rp9Q_XF_9xDAk"; // Settings → API → anon public key
+
+const supa = (SUPABASE_URL.startsWith("http")) ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+/* ============================= CONTENT ============================= */
+const LEVELS = ["A1","A2","B1","B2","C1","C2","Business"];
+const LEVEL_LABEL = { A1:"Podstawy", A2:"Elementarny", B1:"Samodzielny", B2:"Wyższy średni", C1:"Zaawansowany", C2:"Biegły", Business:"Biznesowy" };
+const LESSON_TOPICS = {
+  A1:[["Poznajmy się","imię, kraj, podstawowe zdania"],["W kawiarni","zamawianie, liczby, uprzejmość"],["Moja rodzina","opis rodziny, proste przymiotniki"]],
+  A2:[["Plany na weekend","czas przyszły, propozycje"],["Pytanie o drogę","kierunki, czasowniki ruchu"],["Zakupy","porównania, ceny, preferencje"]],
+  B1:[["Opowiadanie o doświadczeniu","czasy przeszłe, spójna narracja"],["Zdrowie i samopoczucie","opis objawów, rady"],["Wyrażanie opinii","zgoda/niezgoda, uzasadnianie"]],
+  B2:[["Debata: praca zdalna","argumentacja, strona bierna"],["Rozwiązywanie problemu","hipotezy, tryb warunkowy"],["Podsumowanie artykułu","parafraza, spójniki"]],
+  C1:[["Negocjacje","idiomy, subtelne niuanse"],["Abstrakcyjne tematy","struktury złożone, rejestr formalny"],["Analiza danych na głos","precyzyjne słownictwo, spójność"]],
+  C2:[["Retoryka i perswazja","styl, ton, subtelność"],["Literacki angielski","niuanse, konotacje"],["Improwizowana dyskusja","płynność bez przygotowania"]],
+  Business:[["Prezentacja wyników","struktura, liczby, pewność siebie"],["Rozmowa kwalifikacyjna","STAR, mocne strony"],["E-mail i small talk biznesowy","ton formalny, uprzejme prośby"],["Negocjacje kontraktu","argumenty, kompromisy"]]
+};
+
+/* ============================= AUTH + STATE ============================= */
+let session = null;
+let state = { name:"", level:null, placementDone:false, voiceGender:"female", voiceURI:null, completed:{}, xp:0, mistakeLog:[] };
+let screen = "loading";
+let voices=[]; let recognition=null, listening=false;
+let currentLessonMsgs=[]; let mode=null; let currentLesson=null; let placementTurns=0; let currentLevelOpen=null;
+
+async function boot(){
+  if(!supa){ renderConfigError(); return; }
+  const { data } = await supa.auth.getSession();
+  session = data.session;
+  supa.auth.onAuthStateChange((_event, sess)=>{ session = sess; screen = sess ? "levels" : "auth"; render(); });
+  if(session){ await loadState(); screen = "setup"; } else { screen = "auth"; }
+  initVoices();
+  render();
+}
+function renderConfigError(){
+  document.getElementById("app").innerHTML = `<div class="main"><div class="card" style="max-width:520px;">
+    <h2>Brak konfiguracji Supabase</h2>
+    <p class="lede">Uzupełnij <code>SUPABASE_URL</code> i <code>SUPABASE_ANON_KEY</code> na górze pliku <code>public/index.html</code> — instrukcja w README.md.</p>
+  </div></div>`;
+}
+
+async function loadState(){
+  try{
+    const { data, error } = await supa.from('progress').select('state').eq('user_id', session.user.id).maybeSingle();
+    if(data && data.state) state = Object.assign(state, data.state);
+    if(!state.name) state.name = (session.user.email||"Uczeń").split("@")[0];
+  }catch(e){}
+}
+async function saveState(){
+  try{ await supa.from('progress').upsert({ user_id: session.user.id, state, updated_at: new Date().toISOString() }); }catch(e){}
+}
+
+/* ============================= VOICES ============================= */
+const FEMALE_HINTS=["female","zira","samantha","victoria","karen","moira","tessa","fiona","susan","kate","serena","ava","allison","nicky","emma","amy","joanna","salli","kimberly","kendra"];
+const MALE_HINTS=["male","david","mark","alex","daniel","fred","tom","ryan","justin","guy","matthew","brian","eric","russell","james"];
+function guessGender(v){ const n=(v.name+" "+v.voiceURI).toLowerCase(); if(FEMALE_HINTS.some(h=>n.includes(h))) return "female"; if(MALE_HINTS.some(h=>n.includes(h))) return "male"; return "unknown"; }
+function initVoices(){ const load=()=>{ voices = speechSynthesis.getVoices().filter(v=>v.lang && v.lang.toLowerCase().startsWith("en")); if(document.getElementById("voiceSelect")) populateVoiceSelect(); }; load(); speechSynthesis.onvoiceschanged = load; }
+function voicesForGender(g){ const m = voices.filter(v=>guessGender(v)===g); return m.length?m:voices; }
+function populateVoiceSelect(){ const sel=document.getElementById("voiceSelect"); if(!sel) return; const list=voicesForGender(state.voiceGender);
+  sel.innerHTML = list.map(v=>`<option value="${v.voiceURI}">${v.name} (${v.lang})</option>`).join("");
+  if(state.voiceURI && list.some(v=>v.voiceURI===state.voiceURI)) sel.value=state.voiceURI; else if(list[0]) state.voiceURI = list[0].voiceURI; }
+function pickVoice(){ return voices.find(v=>v.voiceURI===state.voiceURI) || voicesForGender(state.voiceGender)[0] || voices[0]; }
+function speak(text, onEnd){ try{ speechSynthesis.cancel(); }catch(e){} const u=new SpeechSynthesisUtterance(text); const v=pickVoice(); if(v) u.voice=v; u.lang=(v&&v.lang)||"en-US"; u.rate=0.98; if(onEnd) u.onend=onEnd; speechSynthesis.speak(u); }
+
+/* ============================= SPEECH RECOGNITION ============================= */
+function speechSupported(){ return !!(window.SpeechRecognition || window.webkitSpeechRecognition); }
+function micErrorMessage(code){
+  const map = { "not-allowed":"Dostęp do mikrofonu zablokowany. Kliknij ikonę kłódki obok adresu strony, zezwól na mikrofon i odśwież.",
+    "service-not-allowed":"Przeglądarka zablokowała rozpoznawanie mowy na tej stronie.", "no-speech":"Nie usłyszałem mowy — spróbuj ponownie.",
+    "audio-capture":"Nie znaleziono mikrofonu.", "network":"Problem z siecią rozpoznawania mowy.", "aborted":"Nasłuchiwanie przerwane." };
+  return map[code] || ("Błąd mikrofonu ("+code+").");
+}
+function startRecognition(onFinal,onInterim){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){ toast("Ta przeglądarka nie wspiera rozpoznawania mowy. Użyj Chrome/Edge."); return false; }
+  if(listening) return false;
+  try{
+    recognition = new SR(); recognition.lang="en-US"; recognition.interimResults=true; recognition.continuous=false;
+    recognition.onresult=(e)=>{ let interim="",final=""; for(let i=e.resultIndex;i<e.results.length;i++){ const t=e.results[i][0].transcript; if(e.results[i].isFinal) final+=t; else interim+=t; }
+      if(interim&&onInterim) onInterim(interim); if(final){ listening=false; onFinal(final.trim()); } };
+    recognition.onerror=(e)=>{ listening=false; toast(micErrorMessage(e.error)); render(); };
+    recognition.onend=()=>{ if(listening){ listening=false; render(); } };
+    recognition.onstart=()=>{ listening=true; render(); };
+    recognition.start(); return true;
+  }catch(err){ listening=false; toast("Nie udało się uruchomić mikrofonu: "+(err&&err.message?err.message:String(err))); return false; }
+}
+function stopRecognition(){ if(recognition){ try{recognition.stop();}catch(e){} } listening=false; }
+
+/* ============================= AI PROXY (server keeps the key secret) ============================= */
+async function askTutor(messages){
+  try{ const r = await fetch('/api/ai', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({messages})}); return await r.json(); }
+  catch(e){ return null; }
+}
+async function askTutorJSON(messages){
+  try{ const r = await fetch('/api/ai', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({messages, json:true})}); const d = await r.json(); return d.parsed; }
+  catch(e){ return null; }
+}
+
+/* ============================= RENDER SHELL ============================= */
+function el(html){ const t=document.createElement("template"); t.innerHTML=html.trim(); return t.content.firstElementChild; }
+function escapeHtml(s){ const d=document.createElement("div"); d.textContent=s; return d.innerHTML; }
+function toast(msg){ const ex=document.querySelector(".toast"); if(ex) ex.remove(); const t=el(`<div class="toast">${escapeHtml(msg)}</div>`); document.body.appendChild(t); setTimeout(()=>t.remove(),3200); }
+
+function render(){
+  const app = document.getElementById("app"); app.innerHTML = "";
+  if(screen==="auth"){ app.appendChild(renderAuth()); return; }
+  app.appendChild(renderSidebar());
+  app.appendChild(renderMain());
+}
+
+/* ============================= AUTH SCREEN ============================= */
+let authMode = "signin";
+function renderAuth(){
+  const wrap = el(`
+    <div class="main" style="max-width:none;">
+      <div class="auth-wrap">
+        <div class="brand" style="margin-bottom:22px;"><div class="brand-mark">🎙️</div><div class="brand-name">TalkTrack</div></div>
+        <div class="auth-tabs">
+          <button class="btn small ${authMode==='signin'?'active':''}" data-m="signin">Zaloguj</button>
+          <button class="btn small ${authMode==='signup'?'active':''}" data-m="signup">Załóż konto</button>
+        </div>
+        <div class="card">
+          <div class="field" style="margin-bottom:14px;"><label>E-mail</label><input type="email" id="authEmail"></div>
+          <div class="field" style="margin-bottom:18px;"><label>Hasło</label><input type="password" id="authPass"></div>
+          <button class="btn primary" id="authBtn" style="width:100%;">${authMode==='signin'?'Zaloguj się':'Utwórz konto'}</button>
+          <div class="error-text" id="authError"></div>
+        </div>
+      </div>
+    </div>`);
+  wrap.querySelectorAll("[data-m]").forEach(b=>b.addEventListener("click", ()=>{ authMode=b.dataset.m; render(); }));
+  wrap.querySelector("#authBtn").addEventListener("click", async ()=>{
+    const email = wrap.querySelector("#authEmail").value.trim();
+    const pass = wrap.querySelector("#authPass").value;
+    const errEl = wrap.querySelector("#authError"); errEl.textContent = "";
+    if(!email || !pass){ errEl.textContent = "Podaj e-mail i hasło."; return; }
+    const fn = authMode==='signin' ? supa.auth.signInWithPassword({email,password:pass}) : supa.auth.signUp({email,password:pass});
+    const { data, error } = await fn;
+    if(error){ errEl.textContent = error.message; return; }
+    if(authMode==='signup' && !data.session){ toast("Konto utworzone — sprawdź e-mail, aby potwierdzić (jeśli włączone w Supabase)."); return; }
+  });
+  return wrap;
+}
+
+/* ============================= SIDEBAR ============================= */
+function lessonCount(lv){ return LESSON_TOPICS[lv].length; }
+function renderSidebar(){
+  const rungs = LEVELS.map(lv=>{
+    const done = !!state.completed[lv] && state.completed[lv]>=lessonCount(lv);
+    const isCurrent = state.level===lv;
+    return `<div class="rung ${isCurrent?'active current':''} ${done?'done':''}" data-lv="${lv}"><span class="dot"></span><span>${lv} · ${LEVEL_LABEL[lv]}</span></div>`;
+  }).join("");
+  const wrap = el(`
+    <div class="sidebar">
+      <div class="brand"><div class="brand-mark">🎙️</div><div class="brand-name">TalkTrack</div></div>
+      <div class="profile-chip"><div class="av">${(state.name||"?")[0].toUpperCase()}</div><div style="flex:1;">${state.name||"Uczeń"}</div>
+        <button class="btn small ghost" id="logoutBtn" style="padding:4px 8px;">Wyloguj</button></div>
+      <div class="ladder">${rungs}</div>
+      <div class="sidebar-foot">Poziom: <b style="color:var(--ink)">${state.level||"—"}</b><br>XP: ${state.xp||0}<br>Konto: ${session.user.email}</div>
+    </div>`);
+  wrap.querySelectorAll(".rung").forEach(r=>r.addEventListener("click", ()=>{ if(!state.placementDone) return; openLevel(r.dataset.lv); }));
+  wrap.querySelector("#logoutBtn").addEventListener("click", async ()=>{ await supa.auth.signOut(); });
+  return wrap;
+}
+
+/* ============================= MAIN ROUTER ============================= */
+function renderMain(){
+  if(!state.name || screen==="setup") return renderSetup();
+  if(!state.placementDone && screen!=="lesson"){ screen="placement"; return renderPlacement(); }
+  if(screen==="placement") return renderPlacement();
+  if(screen==="levelDetail") return renderLevelDetail();
+  if(screen==="lesson") return renderLesson();
+  screen="levels"; return renderLevels();
+}
+
+/* ============================= SETUP ============================= */
+function renderSetup(){
+  const wrap = el(`
+    <div class="main">
+      <div class="kicker">Zacznijmy</div>
+      <h1 class="page-title">Ustaw swój profil głosowy</h1>
+      <p class="lede">TalkTrack mówi wyłącznie po angielsku i słucha Cię przez mikrofon.</p>
+      <div class="card">
+        <div class="setup-grid">
+          <div class="field"><label>Twoje imię</label><input type="text" id="nameInput" value="${state.name||''}"></div>
+          <div class="field"><label>Głos lektora</label>
+            <div class="voice-toggle">
+              <button type="button" data-g="female" class="btn ${state.voiceGender==='female'?'active':''}">Damski</button>
+              <button type="button" data-g="male" class="btn ${state.voiceGender==='male'?'active':''}">Męski</button>
+            </div>
+          </div>
+        </div>
+        <div class="field" style="margin-bottom:18px;"><label>Konkretny głos</label><select id="voiceSelect"></select></div>
+        <div style="display:flex; gap:10px;">
+          <button class="btn primary" id="testVoiceBtn">▶ Testuj głos</button>
+          <button class="btn ghost" id="micTestBtn">🎤 Testuj mikrofon</button>
+        </div>
+        <div style="margin-top:20px;"><button class="btn primary" id="continueBtn" ${state.name?'':'disabled'}>Kontynuuj →</button></div>
+      </div>
+    </div>`);
+  wrap.querySelectorAll("[data-g]").forEach(b=>b.addEventListener("click", ()=>{ state.voiceGender=b.dataset.g; populateVoiceSelect(); saveState(); render(); }));
+  wrap.querySelector("#nameInput").addEventListener("input",(e)=>{ state.name=e.target.value; wrap.querySelector("#continueBtn").disabled=!state.name; });
+  wrap.querySelector("#voiceSelect").addEventListener("change",(e)=>{ state.voiceURI=e.target.value; saveState(); });
+  wrap.querySelector("#testVoiceBtn").addEventListener("click", ()=> speak("Hi! I'm your English tutor. Let's get your speaking level sorted out."));
+  wrap.querySelector("#micTestBtn").addEventListener("click", ()=>{ if(!speechSupported()){ toast("Ta przeglądarka nie wspiera rozpoznawania mowy."); return; } startRecognition((t)=>toast('Usłyszałem: "'+t+'"'), ()=>{}); });
+  wrap.querySelector("#continueBtn").addEventListener("click", ()=>{ state.name = wrap.querySelector("#nameInput").value.trim()||"Friend"; saveState(); screen = state.placementDone?"levels":"placement"; render(); });
+  setTimeout(populateVoiceSelect,0);
+  return wrap;
+}
+
+/* ============================= PLACEMENT ============================= */
+function renderPlacement(){
+  if(mode!=="placement"){ mode="placement"; currentLessonMsgs=[]; placementTurns=0; }
+  const wrap = el(`
+    <div class="main">
+      <div class="kicker">Test poziomujący</div>
+      <h1 class="page-title">Sprawdźmy Twój poziom</h1>
+      <p class="lede">Krótka rozmowa (5–6 pytań) po angielsku. Odpowiadaj głosem lub tekstem.</p>
+      <div class="card stage"><div class="transcript" id="transcript"></div><div id="stageControls"></div></div>
+    </div>`);
+  renderTranscriptInto(wrap.querySelector("#transcript"));
+  renderControlsInto(wrap.querySelector("#stageControls"), {allowCorrectMe:false});
+  if(currentLessonMsgs.length===0){ pushSystem("Rozpoczynam test poziomujący…"); tutorTurn(placementSystemPrompt(), true); }
+  return wrap;
+}
+function placementSystemPrompt(){
+  return `You are "TalkTrack", a friendly spoken-English placement examiner. You ONLY speak English, short natural sentences for text-to-speech (no markdown, no emojis). Conduct a brief adaptive oral placement test to estimate CEFR level (A1-C2). Ask exactly one question at a time, increasing difficulty based on answers. After 6 questions total, do NOT ask a 7th — give a short warm closing line saying the test is complete. Keep messages under 40 words. Never mention CEFR levels to the learner.`;
+}
+
+/* ============================= LEVELS ============================= */
+function renderLevels(){
+  const idx = LEVELS.indexOf(state.level);
+  const cards = LEVELS.map((lv,i)=>{
+    const locked = i>idx+1 && lv!=="Business";
+    return `<div class="card level-card" data-lv="${lv}" style="${locked?'opacity:.5;cursor:default;':''}">
+      <span class="badge ${locked?'locked':''}">${lv}</span><h3>${LEVEL_LABEL[lv]}</h3>
+      <p>${LESSON_TOPICS[lv].length} lekcje · ${state.completed[lv]||0}/${lessonCount(lv)} ukończone</p></div>`;
+  }).join("");
+  const wrap = el(`
+    <div class="main">
+      <div class="eyebrow-row"><div><div class="kicker">Twoja ścieżka</div><h1 class="page-title">Cześć, ${state.name}</h1></div>
+        <button class="btn ghost small" id="retestBtn">Powtórz test</button></div>
+      <p class="lede">Twój aktualny poziom to <b style="color:var(--amber)">${state.level}</b>.</p>
+      <div class="level-grid">${cards}</div>
+    </div>`);
+  wrap.querySelectorAll("[data-lv]").forEach(c=>{ if(c.style.cursor==="default") return; c.addEventListener("click", ()=>openLevel(c.dataset.lv)); });
+  wrap.querySelector("#retestBtn").addEventListener("click", ()=>{ state.placementDone=false; saveState(); mode=null; screen="placement"; render(); });
+  return wrap;
+}
+function openLevel(lv){ screen="levelDetail"; currentLevelOpen=lv; render(); }
+function renderLevelDetail(){
+  const lv = currentLevelOpen;
+  const rows = LESSON_TOPICS[lv].map((t,i)=>{
+    const done = i < (state.completed[lv]||0);
+    return `<div class="lesson-row"><div><div>${done?'✅ ':''}${t[0]}</div><div class="meta">${t[1]}</div></div>
+      <button class="btn small ${done?'ghost':'primary'}" data-i="${i}">${done?"Powtórz":"Zacznij"}</button></div>`;
+  }).join("");
+  const wrap = el(`<div class="main"><button class="btn ghost small" id="backBtn">← Wszystkie poziomy</button>
+    <div class="kicker" style="margin-top:14px;">${lv} · ${LEVEL_LABEL[lv]}</div><h1 class="page-title">Lekcje</h1><div class="card">${rows}</div></div>`);
+  wrap.querySelector("#backBtn").addEventListener("click", ()=>{ screen="levels"; render(); });
+  wrap.querySelectorAll("[data-i]").forEach(b=>b.addEventListener("click", ()=> startLesson(lv, LESSON_TOPICS[lv][parseInt(b.dataset.i)])));
+  return wrap;
+}
+
+/* ============================= LESSON ============================= */
+function startLesson(level, topic){ currentLesson={level,title:topic[0],focus:topic[1]}; mode="lesson"; currentLessonMsgs=[]; screen="lesson"; render(); }
+function lessonSystemPrompt(){
+  return `You are "TalkTrack", a warm spoken English tutor. You ONLY speak English, natural TTS-friendly sentences (no markdown/emojis). Learner level: ${state.level}. Lesson "${currentLesson.title}", focus: ${currentLesson.focus}. Run a short natural conversation/roleplay practicing this, one thing at a time, turns under 35 words. Do not lecture about mistakes mid-flow. After ~5-6 learner turns, wrap up warmly, say the lesson is complete, and congratulate them on something specific.`;
+}
+function renderLesson(){
+  const wrap = el(`<div class="main"><div class="eyebrow-row"><div><div class="kicker">${currentLesson.level} · ${currentLesson.focus}</div>
+    <h1 class="page-title">${currentLesson.title}</h1></div><button class="btn ghost small" id="exitBtn">Zakończ</button></div>
+    <div class="card stage"><div class="transcript" id="transcript"></div><div id="stageControls"></div></div></div>`);
+  wrap.querySelector("#exitBtn").addEventListener("click", ()=>{ speechSynthesis.cancel(); stopRecognition(); screen="levels"; render(); });
+  renderTranscriptInto(wrap.querySelector("#transcript"));
+  renderControlsInto(wrap.querySelector("#stageControls"), {allowCorrectMe:true});
+  if(currentLessonMsgs.length===0) tutorTurn(lessonSystemPrompt(), true);
+  return wrap;
+}
+
+/* ============================= CONVERSATION ENGINE ============================= */
+function pushMsg(role, content, extra){
+  currentLessonMsgs.push({role, content, extra: extra||null});
+  const t=document.getElementById("transcript"); if(t) renderTranscriptInto(t);
+  if(mode==="lesson" && role==="assistant"){
+    const userTurns = currentLessonMsgs.filter(m=>m.role==="user").length;
+    if(userTurns>=5 && /congrat|well done|complete|great job|that.?s it for today|wrap/i.test(content)){
+      const lv = currentLesson.level;
+      state.completed[lv] = Math.max(state.completed[lv]||0, LESSON_TOPICS[lv].findIndex(x=>x[0]===currentLesson.title)+1);
+      state.xp = (state.xp||0)+15; saveState();
+      setTimeout(()=>toast("Lekcja ukończona! +15 XP"),500);
+    }
+  }
+}
+function pushSystem(text){ pushMsg("meta", text); }
+function renderTranscriptInto(container){
+  container.innerHTML = currentLessonMsgs.map(m=>{
+    if(m.role==="meta") return `<div class="bubble system">${m.content}</div>`;
+    if(m.role==="assistant") return `<div class="bubble tutor"><span class="serif">${escapeHtml(m.content)}</span></div>`;
+    if(m.role==="user"){
+      let corr="";
+      if(m.extra && m.extra.type==="correction"){
+        corr = m.extra.hasError
+          ? `<div class="correction"><b>Poprawka:</b> ${escapeHtml(m.extra.corrected)}<br><span style="color:var(--ink-dim)">${escapeHtml(m.extra.explanationPl)}</span></div>`
+          : `<div class="correction ok"><b>✓ Świetnie</b> — bez błędów.</div>`;
+      }
+      return `<div class="bubble user">${escapeHtml(m.content)}${corr}</div>`;
+    }
+    return "";
+  }).join("");
+  container.scrollTop = container.scrollHeight;
+}
+async function tutorTurn(systemPrompt, isFirst){
+  showLoader(true);
+  const msgs=[{role:"user", content: systemPrompt + (isFirst?"\n\nBegin now with your first line.":"")}];
+  currentLessonMsgs.forEach(m=>{ if(m.role==="assistant"||m.role==="user") msgs.push({role:m.role, content:m.content}); });
+  if(!isFirst) msgs.push({role:"user", content:"(continue the conversation naturally)"});
+  const res = await askTutor(msgs);
+  showLoader(false);
+  const text = (res && res.text) ? res.text.trim() : "Sorry, I'm having trouble connecting right now. Let's try again in a moment.";
+  pushMsg("assistant", text); speak(text);
+  if(mode==="placement"){ placementTurns++; if(placementTurns>=6) setTimeout(finishPlacement,600); }
+}
+function renderControlsInto(container, opts){
+  container.innerHTML = `
+    <div class="controls">
+      <button class="mic-btn ${listening?'listening':''}" id="micBtn" ${!speechSupported()?'disabled':''}>${listening?'■':'🎤'}</button>
+      <div class="live-text" id="liveText">${speechSupported()?(listening?"Słucham…":"Naciśnij mikrofon i mów po angielsku…"):"Mikrofon niewspierany — wpisz odpowiedź."}</div>
+    </div>
+    <div style="display:flex; gap:8px; margin-top:10px;">
+      <input type="text" id="typeInput" placeholder="…albo wpisz odpowiedź po angielsku" style="flex:1; padding:10px 12px; border-radius:4px; border:1px solid var(--line); background:var(--surface); color:var(--ink);">
+      <button class="btn primary small" id="sendBtn">Wyślij</button>
+    </div>
+    <div class="stage-actions" style="margin-top:10px;">
+      ${opts.allowCorrectMe?'<button class="btn small" id="correctMeBtn">✏️ Popraw mnie teraz</button>':''}
+      <button class="btn ghost small" id="repeatBtn">🔁 Powtórz</button>
+    </div>`;
+  const send=(text)=>{ if(text && text.trim()) handleUserUtterance(text.trim()); };
+  container.querySelector("#micBtn").addEventListener("click", ()=>{
+    if(listening){ stopRecognition(); render(); return; }
+    const ok = startRecognition((finalText)=>send(finalText), (interim)=>{ const lt=document.getElementById("liveText"); if(lt) lt.textContent=interim; });
+    if(ok) render();
+  });
+  container.querySelector("#sendBtn").addEventListener("click", ()=>{ const inp=container.querySelector("#typeInput"); send(inp.value); inp.value=""; });
+  container.querySelector("#typeInput").addEventListener("keydown",(e)=>{ if(e.key==="Enter"){ send(e.target.value); e.target.value=""; } });
+  container.querySelector("#repeatBtn").addEventListener("click", ()=>{ const last=[...currentLessonMsgs].reverse().find(m=>m.role==="assistant"); if(last) speak(last.content); });
+  const cm = container.querySelector("#correctMeBtn"); if(cm) cm.addEventListener("click", correctMeNow);
+}
+async function handleUserUtterance(text){
+  pushMsg("user", text);
+  if(mode==="lesson") checkCorrection(text);
+  await tutorTurn(mode==="placement"?placementSystemPrompt():lessonSystemPrompt(), false);
+}
+async function checkCorrection(text){
+  const res = await askTutorJSON([{role:"user", content:
+    `You are a strict but kind English grammar/vocabulary checker. The learner (level ${state.level||'unknown'}) said: "${text}". Respond ONLY with JSON: {"hasError": boolean, "corrected": "corrected sentence", "explanationPl": "one short friendly Polish sentence"}.`}]);
+  if(res){
+    const msg = [...currentLessonMsgs].reverse().find(m=>m.role==="user" && m.content===text && !m.extra);
+    if(msg){
+      msg.extra = {type:"correction", hasError: !!res.hasError, corrected: res.corrected||text, explanationPl: res.explanationPl||""};
+      if(res.hasError) state.mistakeLog.push({text, corrected:res.corrected, at:Date.now(), level:state.level});
+      const t=document.getElementById("transcript"); if(t) renderTranscriptInto(t);
+      saveState();
+    }
+  }
+}
+async function correctMeNow(){
+  const lastUser=[...currentLessonMsgs].reverse().find(m=>m.role==="user");
+  if(!lastUser){ toast("Powiedz coś najpierw."); return; }
+  showLoader(true);
+  const res = await askTutorJSON([{role:"user", content:`Check this learner sentence: "${lastUser.content}". Respond ONLY with JSON: {"hasError": boolean, "corrected": "corrected sentence", "explanationPl": "short friendly Polish explanation"}.`}]);
+  showLoader(false);
+  if(res){
+    lastUser.extra = {type:"correction", hasError: !!res.hasError, corrected: res.corrected||lastUser.content, explanationPl: res.explanationPl||""};
+    const t=document.getElementById("transcript"); if(t) renderTranscriptInto(t);
+    speak(res.hasError ? ("Small correction: "+res.corrected) : "That was correct, nice work.");
+  }
+}
+function showLoader(on){
+  const t=document.getElementById("transcript"); if(!t) return;
+  let ld=document.getElementById("tutorLoader");
+  if(on && !ld){ ld=el(`<div class="loader" id="tutorLoader" style="padding:4px 2px;">TalkTrack pisze <span class="dot3"><span></span><span></span><span></span></span></div>`); t.appendChild(ld); t.scrollTop=t.scrollHeight; }
+  else if(!on && ld){ ld.remove(); }
+}
+async function finishPlacement(){
+  showLoader(true);
+  const transcriptText = currentLessonMsgs.filter(m=>m.role!=="meta").map(m=>`${m.role==='assistant'?'Examiner':'Learner'}: ${m.content}`).join("\n");
+  const res = await askTutorJSON([{role:"user", content:`Based on this placement test transcript, estimate CEFR level. Respond ONLY with JSON: {"level": one of "A1","A2","B1","B2","C1","C2", "summaryPl": "2 short Polish sentences: strengths + one area to improve"}.\n\nTranscript:\n${transcriptText}`}]);
+  showLoader(false);
+  const level = (res && LEVELS.includes(res.level)) ? res.level : "A2";
+  state.level=level; state.placementDone=true; state.xp=(state.xp||0)+10; saveState();
+  pushSystem(`Wynik: poziom ${level}. ${res&&res.summaryPl?res.summaryPl:''}`);
+  screen="levels"; setTimeout(()=>{ toast(`Twój poziom: ${level}`); render(); },400);
+}
+
+boot();
+</script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+{
+  "name": "talktrack-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "TalkTrack — voice-based English tutor with real external auth (Supabase) and a secure Claude API proxy (Vercel serverless function)."
+}
