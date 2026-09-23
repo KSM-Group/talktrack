@@ -1,6 +1,9 @@
 // Cloudflare Worker (new unified Workers flow — matches "npx wrangler deploy" in the dashboard).
 // Serves the static app from /public (via the ASSETS binding) and handles POST /api/ai itself.
-// Requires an environment variable / secret ANTHROPIC_API_KEY set in the Worker's settings.
+// Uses Cloudflare Workers AI (free daily tier, no separate API key needed) — see the "ai" binding
+// in wrangler.jsonc. No ANTHROPIC_API_KEY required for this version.
+
+const MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 
 export default {
   async fetch(request, env) {
@@ -16,11 +19,6 @@ export default {
 };
 
 async function handleAI(request, env) {
-  const apiKey = env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return json({ error: "ANTHROPIC_API_KEY not configured on the server." }, 500);
-  }
-
   let body;
   try {
     body = await request.json();
@@ -28,53 +26,43 @@ async function handleAI(request, env) {
     return json({ error: "Invalid JSON body" }, 400);
   }
 
-  const { messages, json: wantJson, maxTokens } = body || {};
+  const { messages, json: wantJson } = body || {};
   if (!messages) {
     return json({ error: "messages is required (string or array of {role, content})" }, 400);
   }
 
-  const anthropicMessages = Array.isArray(messages)
-    ? messages
+  const workersAiMessages = Array.isArray(messages)
+    ? messages.map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content }))
     : [{ role: "user", content: String(messages) }];
 
   try {
-    const apiRes = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01"
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-5",
-        max_tokens: maxTokens || 1000,
-        messages: anthropicMessages
-      })
+    const result = await env.AI.run(MODEL, {
+      messages: workersAiMessages,
+      max_tokens: 600
     });
 
-    if (!apiRes.ok) {
-      const errText = await apiRes.text();
-      return json({ error: "Anthropic API error", detail: errText }, apiRes.status);
-    }
-
-    const data = await apiRes.json();
-    const text = (data.content || [])
-      .map((block) => (block.type === "text" ? block.text : ""))
-      .filter(Boolean)
-      .join("\n");
+    // Workers AI text-generation models return { response: "..." } (non-streaming).
+    const text = (result && (result.response || result.result || "")) + "";
 
     if (wantJson) {
       const cleaned = text.replace(/```json|```/g, "").trim();
       try {
         return json({ parsed: JSON.parse(cleaned), raw: text }, 200);
       } catch (e) {
+        // model sometimes wraps JSON in prose — try to find the first {...} block
+        const match = cleaned.match(/\{[\s\S]*\}/);
+        if (match) {
+          try {
+            return json({ parsed: JSON.parse(match[0]), raw: text }, 200);
+          } catch (e2) { /* fall through */ }
+        }
         return json({ parsed: null, raw: text }, 200);
       }
     }
 
-    return json({ text }, 200);
+    return json({ text: text.trim() }, 200);
   } catch (e) {
-    return json({ error: String(e) }, 500);
+    return json({ error: "Workers AI error", detail: String(e) }, 500);
   }
 }
 
