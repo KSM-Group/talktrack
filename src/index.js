@@ -13,6 +13,10 @@ export default {
       return handleAI(request, env);
     }
 
+    if (url.pathname === "/api/tts" && request.method === "POST") {
+      return handleTTS(request, env);
+    }
+
     // everything else: serve the static files in /public
     return env.ASSETS.fetch(request);
   }
@@ -71,4 +75,25 @@ function json(obj, status) {
     status,
     headers: { "Content-Type": "application/json" }
   });
+}
+
+async function handleTTS(request, env) {
+  let body;
+  try {
+    body = await request.json();
+  } catch (e) {
+    return json({ error: "Invalid JSON body" }, 400);
+  }
+  const { text, speaker } = body || {};
+  if (!text) return json({ error: "text is required" }, 400);
+
+  try {
+    const resp = await env.AI.run("@cf/deepgram/aura-1", {
+      text: String(text).slice(0, 1500),
+      speaker: speaker || "asteria"
+    }, { returnRawResponse: true });
+    return resp;
+  } catch (e) {
+    return json({ error: "TTS error", detail: String(e) }, 500);
+  }
 }
