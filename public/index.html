@@ -113,8 +113,8 @@ p.lede{ color:var(--ink-dim); font-size:1rem; max-width:60ch; line-height:1.55; 
 
 <script>
 /* ============================= CONFIG — replace with your own project ============================= */
-const SUPABASE_URL = "https://uujseerljwjmprlbkpxk.supabase.co";       // np. https://xxxx.supabase.co
-const SUPABASE_ANON_KEY = "sb_publishable_myG-R6bO1ZywW0QxB0Rp9Q_XF_9xDAk"; // Settings → API → anon public key
+const SUPABASE_URL = "REPLACE_WITH_YOUR_SUPABASE_URL";       // np. https://xxxx.supabase.co
+const SUPABASE_ANON_KEY = "REPLACE_WITH_YOUR_SUPABASE_ANON_KEY"; // Settings → API → anon public key
 
 const supa = (SUPABASE_URL.startsWith("http")) ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
@@ -133,7 +133,7 @@ const LESSON_TOPICS = {
 
 /* ============================= AUTH + STATE ============================= */
 let session = null;
-let state = { name:"", level:null, placementDone:false, voiceGender:"female", voiceURI:null, completed:{}, xp:0, mistakeLog:[] };
+let state = { name:"", level:null, placementDone:false, voiceGender:"female", speaker:null, completed:{}, xp:0, mistakeLog:[] };
 let screen = "loading";
 let voices=[]; let recognition=null, listening=false;
 let currentLessonMsgs=[]; let mode=null; let currentLesson=null; let placementTurns=0; let currentLevelOpen=null;
@@ -144,7 +144,6 @@ async function boot(){
   session = data.session;
   supa.auth.onAuthStateChange((_event, sess)=>{ session = sess; screen = sess ? "levels" : "auth"; render(); });
   if(session){ await loadState(); screen = "setup"; } else { screen = "auth"; }
-  initVoices();
   render();
 }
 function renderConfigError(){
@@ -165,17 +164,32 @@ async function saveState(){
   try{ await supa.from('progress').upsert({ user_id: session.user.id, state, updated_at: new Date().toISOString() }); }catch(e){}
 }
 
-/* ============================= VOICES ============================= */
-const FEMALE_HINTS=["female","zira","samantha","victoria","karen","moira","tessa","fiona","susan","kate","serena","ava","allison","nicky","emma","amy","joanna","salli","kimberly","kendra"];
-const MALE_HINTS=["male","david","mark","alex","daniel","fred","tom","ryan","justin","guy","matthew","brian","eric","russell","james"];
-function guessGender(v){ const n=(v.name+" "+v.voiceURI).toLowerCase(); if(FEMALE_HINTS.some(h=>n.includes(h))) return "female"; if(MALE_HINTS.some(h=>n.includes(h))) return "male"; return "unknown"; }
-function initVoices(){ const load=()=>{ voices = speechSynthesis.getVoices().filter(v=>v.lang && v.lang.toLowerCase().startsWith("en")); if(document.getElementById("voiceSelect")) populateVoiceSelect(); }; load(); speechSynthesis.onvoiceschanged = load; }
-function voicesForGender(g){ const m = voices.filter(v=>guessGender(v)===g); return m.length?m:voices; }
-function populateVoiceSelect(){ const sel=document.getElementById("voiceSelect"); if(!sel) return; const list=voicesForGender(state.voiceGender);
-  sel.innerHTML = list.map(v=>`<option value="${v.voiceURI}">${v.name} (${v.lang})</option>`).join("");
-  if(state.voiceURI && list.some(v=>v.voiceURI===state.voiceURI)) sel.value=state.voiceURI; else if(list[0]) state.voiceURI = list[0].voiceURI; }
-function pickVoice(){ return voices.find(v=>v.voiceURI===state.voiceURI) || voicesForGender(state.voiceGender)[0] || voices[0]; }
-function speak(text, onEnd){ try{ speechSynthesis.cancel(); }catch(e){} const u=new SpeechSynthesisUtterance(text); const v=pickVoice(); if(v) u.voice=v; u.lang=(v&&v.lang)||"en-US"; u.rate=0.98; if(onEnd) u.onend=onEnd; speechSynthesis.speak(u); }
+/* ============================= VOICES (Deepgram Aura-1 via Workers AI) ============================= */
+const FEMALE_SPEAKERS = ["asteria","luna","athena","hera","stella"];
+const MALE_SPEAKERS = ["angus","arcas","orion","orpheus","zeus","perseus","helios"];
+function speakerList(){ return state.voiceGender==='male' ? MALE_SPEAKERS : FEMALE_SPEAKERS; }
+function populateVoiceSelect(){
+  const sel=document.getElementById("voiceSelect"); if(!sel) return;
+  const list = speakerList();
+  sel.innerHTML = list.map(s=>`<option value="${s}">${s.charAt(0).toUpperCase()+s.slice(1)}</option>`).join("");
+  if(state.speaker && list.includes(state.speaker)) sel.value=state.speaker;
+  else { state.speaker = list[0]; sel.value = list[0]; }
+}
+let currentAudio = null;
+async function speak(text, onEnd){
+  try{ if(currentAudio){ currentAudio.pause(); currentAudio=null; } }catch(e){}
+  try{
+    const speaker = state.speaker || speakerList()[0];
+    const r = await fetch('/api/tts', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({text, speaker})});
+    if(!r.ok){ if(onEnd) onEnd(); return; }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    currentAudio = new Audio(url);
+    currentAudio.onended = ()=>{ URL.revokeObjectURL(url); if(onEnd) onEnd(); };
+    currentAudio.onerror = ()=>{ URL.revokeObjectURL(url); if(onEnd) onEnd(); };
+    currentAudio.play().catch(()=>{ if(onEnd) onEnd(); });
+  }catch(e){ if(onEnd) onEnd(); }
+}
 
 /* ============================= SPEECH RECOGNITION ============================= */
 function speechSupported(){ return !!(window.SpeechRecognition || window.webkitSpeechRecognition); }
@@ -192,7 +206,7 @@ function startRecognition(onFinal,onInterim){
   try{
     recognition = new SR(); recognition.lang="en-US"; recognition.interimResults=true; recognition.continuous=false;
     recognition.onresult=(e)=>{ let interim="",final=""; for(let i=e.resultIndex;i<e.results.length;i++){ const t=e.results[i][0].transcript; if(e.results[i].isFinal) final+=t; else interim+=t; }
-      if(interim&&onInterim) onInterim(interim); if(final){ listening=false; onFinal(final.trim()); } };
+      if(interim&&onInterim) onInterim(interim); if(final){ listening=false; render(); onFinal(final.trim()); } };
     recognition.onerror=(e)=>{ listening=false; toast(micErrorMessage(e.error)); render(); };
     recognition.onend=()=>{ if(listening){ listening=false; render(); } };
     recognition.onstart=()=>{ listening=true; render(); };
@@ -200,6 +214,16 @@ function startRecognition(onFinal,onInterim){
   }catch(err){ listening=false; toast("Nie udało się uruchomić mikrofonu: "+(err&&err.message?err.message:String(err))); return false; }
 }
 function stopRecognition(){ if(recognition){ try{recognition.stop();}catch(e){} } listening=false; }
+function attemptListen(){
+  if(listening) return;
+  if(!(screen==='placement' || screen==='lesson')) return;
+  if(!speechSupported()) return;
+  const ok = startRecognition(
+    (finalText)=>{ if(finalText && finalText.trim()) handleUserUtterance(finalText.trim()); },
+    (interim)=>{ const lt=document.getElementById("liveText"); if(lt) lt.textContent=interim; }
+  );
+  if(ok) render();
+}
 
 /* ============================= AI PROXY (server keeps the key secret) ============================= */
 async function askTutor(messages){
@@ -314,7 +338,7 @@ function renderSetup(){
     </div>`);
   wrap.querySelectorAll("[data-g]").forEach(b=>b.addEventListener("click", ()=>{ state.voiceGender=b.dataset.g; populateVoiceSelect(); saveState(); render(); }));
   wrap.querySelector("#nameInput").addEventListener("input",(e)=>{ state.name=e.target.value; wrap.querySelector("#continueBtn").disabled=!state.name; });
-  wrap.querySelector("#voiceSelect").addEventListener("change",(e)=>{ state.voiceURI=e.target.value; saveState(); });
+  wrap.querySelector("#voiceSelect").addEventListener("change",(e)=>{ state.speaker=e.target.value; saveState(); });
   wrap.querySelector("#testVoiceBtn").addEventListener("click", ()=> speak("Hi! I'm your English tutor. Let's get your speaking level sorted out."));
   wrap.querySelector("#micTestBtn").addEventListener("click", ()=>{ if(!speechSupported()){ toast("Ta przeglądarka nie wspiera rozpoznawania mowy."); return; } startRecognition((t)=>toast('Usłyszałem: "'+t+'"'), ()=>{}); });
   wrap.querySelector("#continueBtn").addEventListener("click", ()=>{ state.name = wrap.querySelector("#nameInput").value.trim()||"Friend"; saveState(); screen = state.placementDone?"levels":"placement"; render(); });
@@ -432,7 +456,7 @@ async function tutorTurn(systemPrompt, isFirst){
   const res = await askTutor(msgs);
   showLoader(false);
   const text = (res && res.text) ? res.text.trim() : "Sorry, I'm having trouble connecting right now. Let's try again in a moment.";
-  pushMsg("assistant", text); speak(text);
+  pushMsg("assistant", text); speak(text, attemptListen);
   if(mode==="placement"){ placementTurns++; if(placementTurns>=6) setTimeout(finishPlacement,600); }
 }
 function renderControlsInto(container, opts){
@@ -452,8 +476,7 @@ function renderControlsInto(container, opts){
   const send=(text)=>{ if(text && text.trim()) handleUserUtterance(text.trim()); };
   container.querySelector("#micBtn").addEventListener("click", ()=>{
     if(listening){ stopRecognition(); render(); return; }
-    const ok = startRecognition((finalText)=>send(finalText), (interim)=>{ const lt=document.getElementById("liveText"); if(lt) lt.textContent=interim; });
-    if(ok) render();
+    attemptListen();
   });
   container.querySelector("#sendBtn").addEventListener("click", ()=>{ const inp=container.querySelector("#typeInput"); send(inp.value); inp.value=""; });
   container.querySelector("#typeInput").addEventListener("keydown",(e)=>{ if(e.key==="Enter"){ send(e.target.value); e.target.value=""; } });
