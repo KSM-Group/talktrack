@@ -113,8 +113,8 @@ p.lede{ color:var(--ink-dim); font-size:1rem; max-width:60ch; line-height:1.55; 
 
 <script>
 /* ============================= CONFIG — replace with your own project ============================= */
-const SUPABASE_URL = "REPLACE_WITH_YOUR_SUPABASE_URL";       // np. https://xxxx.supabase.co
-const SUPABASE_ANON_KEY = "REPLACE_WITH_YOUR_SUPABASE_ANON_KEY"; // Settings → API → anon public key
+const SUPABASE_URL = "https://uujseerljwjmprlbkpxk.supabase.co";       // np. https://xxxx.supabase.co
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV1anNlZXJsandqbXBybGJrcHhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk5ODE2ODgsImV4cCI6MjEwNTU1NzY4OH0.YRzXPn8INcb4KlG3_sYnTXFqAOG3GOT6L4Zjm300Zzk"; // Settings → API → anon public key
 
 const supa = (SUPABASE_URL.startsWith("http")) ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
